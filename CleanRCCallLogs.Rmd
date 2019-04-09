@@ -1,0 +1,178 @@
+---
+title: "Clean RC CallLogs"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Load package and dataset
+```{r, warning=FALSE, message = FALSE}
+library(tidyverse)
+library(data.table)
+theme_set(theme_light())
+
+call_log <- read_csv("2018-Q4 DETAILED CALL LOG - 9205.csv") %>% 
+  janitor::clean_names()
+```
+
+First attempt at cleaning
+```{r}
+call_log_processed <- call_log %>% 
+  fill(from) %>%
+  fill(to) %>%
+  mutate(ID = rleid(from, to)) %>% 
+  mutate(CallConnected = action_result == "Call connected") %>%
+  group_by(ID, from, to) %>%
+  mutate(who_answered = if_else(action_result == "Call connected", forwarded_to, "NA")) %>% 
+  ungroup() %>% 
+  group_by(ID, date, from, to) %>% 
+  summarise(count_call = sum(CallConnected),
+            who_answered = who_answered[which.max(who_answered != "NA")],
+            duration = duration[which.max(CallConnected)])
+
+call_log_processed %>% 
+  ungroup() %>% 
+  mutate(duration = if_else(who_answered == "NA", "00:00:00", as.character(duration))) %>% 
+  rename(Date = 2,
+         FromNumber = 3,
+         ToNumber = 4,
+         `Number of Connected Calls` = 5,
+         `Who Answered` = 6,
+         Duration = 7) %>% 
+  select(-ID)
+```
+
+
+Try cleaning on Q2 9206
+```{r}
+call_log_9206 <- read_csv("2018-Q2 DETAILED CALL LOG - 9206.csv") %>% 
+  janitor::clean_names()
+
+# call_log_9206 %>% View("original_data")
+
+call_log_9206 %>% 
+  fill(from) %>%
+  fill(to) %>%
+  mutate(ID = rleid(from, to)) %>% 
+  mutate(CallConnected = action_result == "Call connected") %>%
+  group_by(ID, from, to) %>%
+  mutate(who_answered = if_else(action_result == "Call connected", forwarded_to, "NA")) %>% 
+  ungroup() %>% 
+  group_by(ID, from, to) %>% 
+  summarise(count_call = sum(CallConnected),
+            who_answered = who_answered[which.max(who_answered != "NA")],
+            duration = duration[which.max(CallConnected)]) %>% 
+  ungroup() %>% 
+  mutate(duration = if_else(who_answered == "NA", "00:00:00", as.character(duration))) %>% 
+  rename(FromNumber = 2,
+         ToNumber = 3,
+         `Number of Connected Calls` = 4,
+         `Who Answered` = 5,
+         Duration = 6) %>% 
+  select(-ID) %>% 
+  View("cleaned_data")
+```
+
+Try cleaning on 9208
+```{r}
+call_log_9208 <- read_csv("raw-data/2018-Q2 DETAILED CALL LOG - 9208.csv") %>% 
+  janitor::clean_names()
+
+call_log_9208 %>% View("raw_data")
+
+call_log_9208 %>% 
+  fill(from) %>%
+  fill(to) %>%
+  mutate(ID = rleid(from, to)) %>% 
+  mutate(CallConnected = action_result == "Call connected") %>%
+  group_by(ID, from, to) %>%
+  mutate(who_answered = if_else(action_result == "Call connected", forwarded_to, "NA")) %>% 
+  ungroup() %>% 
+  group_by(ID, from, to) %>% 
+  summarise(count_call = sum(CallConnected),
+            who_answered = who_answered[which.max(who_answered != "NA")],
+            duration = duration[which.max(CallConnected)]) %>% 
+  ungroup() %>% 
+  mutate(duration = if_else(who_answered == "NA", "00:00:00", as.character(duration))) %>% 
+  rename(FromNumber = 2,
+         ToNumber = 3,
+         `Number of Connected Calls` = 4,
+         `Who Answered` = 5,
+         Duration = 6) %>% 
+  select(-ID) %>% 
+  View("cleaned_data")
+```
+
+
+
+Let's write a function for automating this data cleaning process
+```{r}
+data_cleaning <- function(raw_data) {
+  
+  # Import Data and clean names
+  processed_data <- read_csv(raw_data) %>% 
+    janitor::clean_names()
+  
+  # Perform data cleaning step
+  cleaned_data <- processed_data %>% 
+    fill(from) %>%
+    fill(to) %>%
+    mutate(ID = rleid(from, to)) %>% 
+    mutate(CallConnected = action_result == "Call connected") %>%
+    group_by(ID, from, to) %>%
+    mutate(who_answered = if_else(action_result == "Call connected", forwarded_to, "NA")) %>% 
+    ungroup() %>% 
+    group_by(ID, date, from, to) %>% 
+    summarise(count_call = sum(CallConnected),
+              who_answered = who_answered[which.max(who_answered != "NA")],
+              duration = duration[which.max(CallConnected)]) %>% 
+    ungroup() %>% 
+    mutate(duration = if_else(who_answered == "NA", "00:00:00", as.character(duration))) %>% 
+    rename(Date = 2,
+           FromNumber = 3,
+           ToNumber = 4,
+           `Number of Connected Calls` = 5,
+           `Who Answered` = 6,
+           Duration = 7) %>% 
+    select(-ID)
+  
+  # TAKE OUT raw-data/ from raw_data
+ raw_data <- substr(raw_data, 10, nchar(raw_data))
+  
+  # Set name of cleaned CSV file
+  csv_name <- paste0("cleaned-data/", raw_data)
+  
+  # Save as CSV
+  cleaned_data %>% 
+    write_csv(csv_name)
+  
+}
+```
+
+
+DATA CLEANING WITH FUNCTION
+
+# Quarter 4
+```{r}
+data_cleaning("raw-data/2018-Q4 DETAILED CALL LOG - 92236.csv")
+data_cleaning("raw-data/2018-Q4 DETAILED CALL LOG - 9208.csv")
+data_cleaning("raw-data/2018-Q4 DETAILED CALL LOG - 9206.csv")
+data_cleaning("raw-data/2018-Q4 DETAILED CALL LOG - 9205.csv")
+```
+
+# Quarter 3
+```{r}
+data_cleaning("raw-data/2018-Q3 DETAILED CALL LOG - 9208.csv")
+data_cleaning("raw-data/2018-Q3 DETAILED CALL LOG - 9206.csv")
+data_cleaning("raw-data/2018-Q3 DETAILED CALL LOG - 9205.csv")
+```
+
+# Quarter 2
+```{r}
+data_cleaning("raw-data/2018-Q2 DETAILED CALL LOG - 9208.csv")
+data_cleaning("raw-data/2018-Q2 DETAILED CALL LOG - 9206.csv")
+data_cleaning("raw-data/2018-Q2 DETAILED CALL LOG - 9205.csv")
+```
